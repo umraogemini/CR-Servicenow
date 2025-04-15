@@ -6,6 +6,12 @@ terraform {
       source  = "devoteamgcloud/servicenow"
       version = ">= 0.1.4"
     }
+
+    servicenow = {
+      source  = "hasicorp/servicenow"
+      version = ">= 0.1.4"
+    }
+
     google = {
       source  = "hashicorp/google"
       version = ">= 6.11.2"
