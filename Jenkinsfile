@@ -36,16 +36,20 @@ pipeline {
 
                     withCredentials([file(credentialsId: "${params.BUILD_SA}_${params.GCP_PROJECT_ID}", variable: 'GCP_SA_KEY_FILE')]) {
                         sh '''
-                            set -e
-                            
-                            echo "Current directory: $(pwd)"
-                            echo "Listing contents:"
+                            set -euxo pipefail
+
+                            echo "🌍 Current directory: $(pwd)"
+                            echo "📁 Initial contents:"
                             ls -la
-                            
+
                             mkdir -p ${WORKSPACE}/${pipelineId}
+                            echo "🛠️ Copying files to: ${WORKSPACE}/${pipelineId}"
                             cp -r ./* ${WORKSPACE}/${pipelineId}/
 
                             cd ${WORKSPACE}/${pipelineId}
+                            echo "📍 Now in directory: $(pwd)"
+                            echo "📁 Files in copied workspace:"
+                            ls -la
 
                             terraform init -no-color
                             terraform validate -no-color
