@@ -19,7 +19,7 @@ pipeline {
     parameters {
         choice(name: 'GCP_PROJECT_ID', choices: ['hsbc-12609073-peakplatuat-dev'], description: 'Google Cloud project ID')
         string(name: 'BUILD_SA', defaultValue: 'automation-deployment', description: 'GCP service account used')
-        string(name: 'ENVIRONMENT', defaultValue: 'DEV', description: 'Deployment environment')
+        string(name: 'ENVIRONMENT', defaultValue: 'UAT', description: 'Deployment environment')
         choice(name: 'TF_MODULE', choices: ['CR-Servicenow'], description: 'Terraform module to deploy')
         choice(name: 'GCP_REGION', choices: ['europe-west2'], description: 'GCP region')
         choice(name: 'TF_ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action')
