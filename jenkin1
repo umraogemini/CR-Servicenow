@@ -1,0 +1,164 @@
+pipeline {
+    agent { label "gcp-bffpeak-jenkins-slave" }
+
+    environment {
+        SERVICENOW_INSTANCE_URL = "https://hsbcitidu.service-now.com/servicenow"
+        REQUESTED_BY = "uma.rao@noexternalmail.hsbc.com"
+        ASSIGNMENT_GROUP = "ET-FINEX-BFF-PEAK-IT"
+        SHORT_DESCRIPTION = "Automated CR via Terraform"
+        DESCRIPTION = "Created for deployment automation"
+        RISK = "low"
+        IMPACT = "low"
+        terraform_provider_home = "/hsbc/terraform_provider"
+    }
+
+    options {
+        buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+    }
+
+    parameters {
+        choice(name: 'GCP_PROJECT_ID', choices: ['hsbc-12609073-peakplat-dev', 'hsbc-12609073-peakmex-dev', 'hsbc-12609073-peakplatsit-dev', 'hsbc-12609073-peakmexsit-dev', 'hsbc-12609073-peakplatuat-dev', 'hsbc-12609073-peakmexuat-dev'], description: 'Google Cloud project ID')
+        string(name: 'BUILD_SA', defaultValue: 'automation-deployment', description: 'GCP service account used for deploying Terraform modules')
+        string(name: 'ENVIRONMENT', defaultValue: 'DEV', description: 'Deployment environment')
+        choice(name: 'TF_MODULE', choices: ['CR-Servicenow'], description: 'Select the Terraform module to deploy')
+        choice(name: 'GCP_REGION', choices: ['europe-west2', 'europe-west1'], description: 'GCP region for deployment')
+        choice(name: 'TF_ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action to run')
+        booleanParam(name: 'SKIP_CP_CHECK', defaultValue: false, description: 'Skip Change Request approval check from ServiceNow')
+        string(name: 'RECIPIENTS', defaultValue: 'uma.rao@noexternalmail.hsbc.com', description: 'Recipients for pipeline notification emails')
+    }
+
+    stages {
+        stage('Prepare Environment') {
+            steps {
+                script {
+                    def pipelineId = "pipeline-${UUID.randomUUID().toString()}"
+                    env.PIPELINE_ID = pipelineId
+                    env.GCP_SA_KEY_ID = "${params.BUILD_SA}_${params.GCP_PROJECT_ID}"
+                    env.MODULE_PATH = "${env.WORKSPACE}/${pipelineId}/gcp_projects/${params.GCP_PROJECT_ID}/${params.TF_MODULE}"
+
+                    echo "Pipeline ID: ${pipelineId}"
+                    echo "TF Action: ${params.TF_ACTION}"
+
+                    withCredentials([file(credentialsId: env.GCP_SA_KEY_ID, variable: 'GCP_SA_KEY_FILE')]) {
+                        withCredentials([file(credentialsId: "NETRC_CONFIG", variable: 'NETRC_CONFIG_FILE')]) {
+                            sh """
+                                set -e
+                                mkdir -p ${env.MODULE_PATH}
+                                cp -r ./gcp_projects ./modules ${env.WORKSPACE}/${pipelineId}
+                                cp "${GCP_SA_KEY_FILE}" ${env.WORKSPACE}/${pipelineId}/secret-sa.json
+                                chmod 700 ${env.WORKSPACE}/${pipelineId}/secret-sa.json
+
+                                cp "${NETRC_CONFIG_FILE}" ${env.MODULE_PATH}/.netrc
+                                chmod 700 ${env.MODULE_PATH}/.netrc
+
+                                mkdir -p "${terraform_provider_home}"
+                                cp "${NETRC_CONFIG_FILE}" "${terraform_provider_home}/.netrc"
+                                chmod 700 "${terraform_provider_home}/.netrc"
+                            """
+                        }
+                    }
+
+                    // Set env variables for Terraform
+                    env.GOOGLE_APPLICATION_CREDENTIALS = "${env.WORKSPACE}/${pipelineId}/secret-sa.json"
+                    env.HOME = terraform_provider_home
+                    env.HTTP_PROXY = "http://googleapis-dev.gcp.cloud.uk.hsbc:3128"
+                    env.HTTPS_PROXY = "http://googleapis-dev.gcp.cloud.uk.hsbc:3128"
+                    env.NO_PROXY = ".hsbc"
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir("${env.MODULE_PATH}") {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                dir("${env.MODULE_PATH}") {
+                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            when {
+                expression { params.TF_ACTION == 'plan' }
+            }
+            steps {
+                dir("${env.MODULE_PATH}") {
+                    sh "terraform plan -out=terraform.tfplan -var-file='${params.ENVIRONMENT}.tfvars' -var='project_id=${params.GCP_PROJECT_ID}'"
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "${env.MODULE_PATH}/terraform.tfplan"
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression { params.TF_ACTION == 'apply' }
+            }
+            input {
+                message "Apply Terraform changes?"
+                ok "Proceed"
+            }
+            steps {
+                dir("${env.MODULE_PATH}") {
+                    script {
+                        def applyOutput = sh(script: "terraform apply -auto-approve terraform.tfplan", returnStdout: true).trim()
+                        def sysIdMatch = applyOutput =~ /automation_ci_sys_id = "(.*?)"/
+                        if (sysIdMatch) {
+                            env.SERVICENOW_CI_SYS_ID = sysIdMatch[0][1]
+                            echo "ServiceNow CI sys_id: ${env.SERVICENOW_CI_SYS_ID}"
+                        } else {
+                            error "Failed to extract ServiceNow CI sys_id from Terraform apply output."
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            when {
+                expression { params.TF_ACTION == 'destroy' }
+            }
+            steps {
+                dir("${env.MODULE_PATH}") {
+                    sh "terraform destroy -auto-approve -var-file='${params.ENVIRONMENT}.tfvars' -var='project_id=${params.GCP_PROJECT_ID}'"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+            script {
+                emailext(
+                    body: """Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]' : ${currentBuild.result}
+
+Check console output at ${env.BUILD_URL} to view the results.""",
+                    subject: """${currentBuild.result == 'SUCCESS' ? 'SUCCESS:' : 'FAILURE:'} Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]'""",
+                    to: "${params.RECIPIENTS}"
+                )
+            }
+        }
+        failure {
+            script {
+                emailext(
+                    body: """Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]' : FAILURE
+
+Check console output at ${env.BUILD_URL} to view the results.""",
+                    subject: """FAILURE: Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]'""",
+                    to: "${params.RECIPIENTS}"
+                )
+            }
+        }
+    }
+}
