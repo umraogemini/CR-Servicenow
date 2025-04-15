@@ -37,8 +37,13 @@ pipeline {
                     withCredentials([file(credentialsId: "${params.BUILD_SA}_${params.GCP_PROJECT_ID}", variable: 'GCP_SA_KEY_FILE')]) {
                         sh '''
                             set -e
+                            
+                            echo "Current directory: $(pwd)"
+                            echo "Listing contents:"
+                            ls -la
+                            
                             mkdir -p ${WORKSPACE}/${pipelineId}
-                            cp -r ./CR-Servicenow/* ${WORKSPACE}/${pipelineId}/
+                            cp -r ./* ${WORKSPACE}/${pipelineId}/
 
                             cd ${WORKSPACE}/${pipelineId}
 
