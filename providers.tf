@@ -3,52 +3,62 @@ terraform {
 
   required_providers {
     servicenow = {
-      source  = "hasicorp/servicenow"
-      version = ">= 0.1.4"
+      source  = "servicenow/servicenow"
+      version = ">= 1.0.0"
     }
 
     google = {
       source  = "hashicorp/google"
       version = ">= 6.11.2"
     }
+
     google-beta = {
       source  = "hashicorp/google-beta"
       version = ">= 6.11.2"
     }
+
     tls = {
       source  = "hashicorp/tls"
       version = ">= 4.0.6"
     }
+
     http = {
       source  = "hashicorp/http"
       version = ">= 3.4.5"
     }
+
     random = {
       source  = "hashicorp/random"
       version = ">= 3.6.3"
     }
+
     time = {
       source  = "hashicorp/time"
       version = ">= 0.12.1"
     }
+
     external = {
       source  = "hashicorp/external"
       version = ">= 2.3.4"
     }
+
     null = {
       source  = "hashicorp/null"
       version = ">= 3.2.3"
     }
+
     local = {
       source  = "hashicorp/local"
       version = ">= 2.5.2"
     }
+
     archive = {
       source  = "hashicorp/archive"
       version = ">= 2.6.0"
     }
+
     venafi = {
-      source  = "registry.terraform.io/Venafi/venafi"
+      source  = "Venafi/venafi"
       version = ">= 0.21.1"
     }
   }
