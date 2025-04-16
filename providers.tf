@@ -3,11 +3,6 @@ terraform {
 
   required_providers {
     servicenow = {
-      source  = "devoteamgcloud/servicenow"
-      version = ">= 0.1.4"
-    }
-
-    servicenow = {
       source  = "hasicorp/servicenow"
       version = ">= 0.1.4"
     }
