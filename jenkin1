@@ -35,6 +35,7 @@ pipeline {
                     env.PIPELINE_ID = pipelineId
                     env.GCP_SA_KEY_ID = "${params.BUILD_SA}_${params.GCP_PROJECT_ID}"
                     env.MODULE_PATH = "${env.WORKSPACE}/${pipelineId}/gcp_projects/${params.GCP_PROJECT_ID}/${params.TF_MODULE}"
+                    env.HOME = terraform_provider_home
 
                     echo "Pipeline ID: ${pipelineId}"
                     echo "TF Action: ${params.TF_ACTION}"
@@ -60,7 +61,6 @@ pipeline {
 
                     // Set env variables for Terraform
                     env.GOOGLE_APPLICATION_CREDENTIALS = "${env.WORKSPACE}/${pipelineId}/secret-sa.json"
-                    env.HOME = terraform_provider_home
                     env.HTTP_PROXY = "http://googleapis-dev.gcp.cloud.uk.hsbc:3128"
                     env.HTTPS_PROXY = "http://googleapis-dev.gcp.cloud.uk.hsbc:3128"
                     env.NO_PROXY = ".hsbc"
