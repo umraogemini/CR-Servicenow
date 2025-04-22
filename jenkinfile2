@@ -1,0 +1,98 @@
+@Library("jenkins-shared-library@master")_
+
+properties([
+    parameters([
+        choice(name: 'ENV', choices: ['UAT', 'PROD'], description: 'Select environment'),
+        string(name: 'JIRA_TICKET_REF', description: 'Jira ticket reference'),
+        string(name: 'automation_ci_name', defaultValue: 'Terraform Managed Automation CI', description: 'CI Name'),
+        string(name: 'automation_ci_short_description', defaultValue: 'Automation CI created by Terraform', description: 'CI Short Description'),
+        string(name: 'user_name', defaultValue: 'example_user', description: 'Assigned user name'),
+        string(name: 'location_name', defaultValue: 'example_location', description: 'CI location'),
+        string(name: 'department_name', defaultValue: 'example_department', description: 'Department'),
+        string(name: 'group_name', defaultValue: 'example_group', description: 'Support Group'),
+        string(name: 'custom_field_value', defaultValue: 'custom value', description: 'Custom field value'),
+        password(name: 'SERVICENOW_PASSWORD', defaultValue: '', description: 'ServiceNow Password'),
+        string(name: 'SERVICENOW_USERNAME', defaultValue: 'jenkins_service_account', description: 'ServiceNow Username')
+    ])
+])
+
+def SERVICENOW_INSTANCE_URL = "https://hsbcitidu.service-now.com/servicenow"
+def TF_DIR = "CR-Servicenow"
+
+pipeline {
+    agent {
+        label 'gcp-treasuryeng-jenkins-slave'
+    }
+
+    environment {
+        TF_LOG = "INFO"
+        TF_IN_AUTOMATION = "true"
+    }
+
+    stages {
+        stage('Terraform Init') {
+            steps {
+                dir(TF_DIR) {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir(TF_DIR) {
+                    withCredentials([usernamePassword(credentialsId: 'servicenow-creds', usernameVariable: 'SN_USER', passwordVariable: 'SN_PASS')]) {
+                        sh """
+                          terraform plan -var="servicenow_instance_url=${SERVICENOW_INSTANCE_URL}" \
+                                         -var="servicenow_username=${params.SERVICENOW_USERNAME}" \
+                                         -var="servicenow_password=${params.SERVICENOW_PASSWORD}" \
+                                         -var="automation_ci_name=${params.automation_ci_name}" \
+                                         -var="automation_ci_short_description=${params.automation_ci_short_description}" \
+                                         -var="user_name=${params.user_name}" \
+                                         -var="location_name=${params.location_name}" \
+                                         -var="department_name=${params.department_name}" \
+                                         -var="group_name=${params.group_name}" \
+                                         -var="custom_field_value=${params.custom_field_value}"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir(TF_DIR) {
+                    withCredentials([usernamePassword(credentialsId: 'servicenow-creds', usernameVariable: 'SN_USER', passwordVariable: 'SN_PASS')]) {
+                        sh """
+                          terraform apply -auto-approve \
+                                         -var="servicenow_instance_url=${SERVICENOW_INSTANCE_URL}" \
+                                         -var="servicenow_username=${params.SERVICENOW_USERNAME}" \
+                                         -var="servicenow_password=${params.SERVICENOW_PASSWORD}" \
+                                         -var="automation_ci_name=${params.automation_ci_name}" \
+                                         -var="automation_ci_short_description=${params.automation_ci_short_description}" \
+                                         -var="user_name=${params.user_name}" \
+                                         -var="location_name=${params.location_name}" \
+                                         -var="department_name=${params.department_name}" \
+                                         -var="group_name=${params.group_name}" \
+                                         -var="custom_field_value=${params.custom_field_value}"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Output CI Info') {
+            steps {
+                dir(TF_DIR) {
+                    sh 'terraform output'
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Terraform apply failed."
+        }
+    }
+}
