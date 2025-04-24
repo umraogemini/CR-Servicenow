@@ -21,6 +21,8 @@ pipeConstructor([
         ],
         gitCredentialld: "bffpeak-auto"
     ],
+
+    // 🔨 This is your build stage
     stageBuild: [
         enable: true,
         stageTag: 'build mw-nginx',
@@ -33,6 +35,8 @@ pipeConstructor([
             imageVersion: '1.18.0'
         ]
     ],
+
+    // 🚀 These are your deployment stages
     stageDockerDeployment: [
         'GCP-dev': [
             enable: true,
