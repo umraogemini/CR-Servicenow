@@ -1,0 +1,71 @@
+@Library('jenkins-shared-library@feature/TREATRANS-1773_fix_cucumber') _
+
+properties([
+    parameters([
+        booleanParam(name: 'GCP_MEXDEV', defaultValue: false, description: 'hsbc-12609073-peakmex-dev'),
+        // booleanParam(name: 'GCP_MEXSIT', defaultValue: false, description: 'hsbc-12609073-peakmexsit-dev')
+    ])
+])
+
+pipeConstructor([
+    pipeController: [
+        buildtime: [
+            'gcp-bffpeak-jenkins-slave': [
+                label: [
+                    name: 'gcp-bffpeak-jenkins-slave',
+                    forcedIndex: 1,
+                    randomIndex: 5
+                ]
+            ]
+        ],
+        gitCredentialld: "bffpeak-auto"
+    ],
+
+    // Optional build & publish stage to avoid version error
+    stageBuildTestPublish: [
+        version: '1.0.0',  // 🔧 REQUIRED: This prevents "Please build a version." error
+        dockerBuild: [
+            enable: true,
+            dockerfilePath: 'Dockerfile',
+            imageName: 'prometheus-proxy',
+            imageTag: '1.0.0',
+            contextPath: '.'
+        ],
+        publish: [
+            enable: true,
+            registry: 'docker.pkg.dev',
+            repository: 'hsbc-12609073-peakmex-dev/prometheus-proxy',
+            credentialId: 'gcp-docker-push-cred'
+        ]
+    ],
+
+    stageDockerDeployment: [
+        'GCP-dev': [
+            enable: true,
+            deploy: [
+                enable: params.GCP_MEXDEV,
+                stageTag: 'deploy hgke',
+                gcpProjectid: 'hsbc-12609073-peakmex-dev',
+                gcpRegion: 'europe-west2',
+                gcpArUri: 'docker.pkg.dev',
+                sakeyld: 'automation-deployment_hsbc-12609073-peakmex-dev',
+                kubectlProxyEndpoint: 'ingress.bffpeak-mex-cluster.hsbc-12609073-peakmex-dev.dev.gcp.cloud.uk.hsbc',
+                kubectlProxyPort: '3128',
+                gkeClusterName: 'bffpeak-mex-cluster',
+                gkeClusterLocation: 'REGIONAL',
+                valuesFile: "values-gcp-mexdev.yaml",
+                gkeNamespace: "ecosystem-monitoring",
+                valuesSubfolder: "prometheus-reverse-proxy",
+                nexus: [
+                    url: 'nexus3.systems.uk.hsbc:18080',
+                    repoName: 'docker-hsbc-internal-dev_n3p',
+                    folderId: 'hsbc-12609073-etfinex-bffpeakit',
+                    artifactId: "common/mw-nginx-118",
+                    credential: 'bffpeak-nexus3-alm-ss',
+                    imageVersion: '1.18.0'
+                ],
+                branchUrl: false
+            ]
+        ]
+    ]
+])
